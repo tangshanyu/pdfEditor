@@ -1,12 +1,12 @@
 import { GoogleGenAI } from "@google/genai";
-import { RedactionRect } from "../types";
+import { AnnotationObject } from "../types";
 
 export const detectSensitiveData = async (
   imageBase64: string,
   pageIndex: number,
   pageWidth: number,
   pageHeight: number
-): Promise<RedactionRect[]> => {
+): Promise<AnnotationObject[]> => {
   const apiKey = process.env.API_KEY;
   if (!apiKey) throw new Error("API Key 未設定");
 
@@ -32,7 +32,7 @@ export const detectSensitiveData = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-image",
+      model: "gemini-3-flash-preview",
       contents: {
         parts: [
           { inlineData: { mimeType: "image/jpeg", data: imageBase64 } },
@@ -64,7 +64,8 @@ export const detectSensitiveData = async (
         x,
         y,
         width: w,
-        height: h
+        height: h,
+        type: 'blackout'
       };
     });
   } catch (error) {
