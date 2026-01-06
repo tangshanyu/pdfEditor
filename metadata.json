@@ -1,0 +1,5 @@
+{
+  "name": "PixelGuard PDF",
+  "description": "一款安全的瀏覽器端 PDF 編輯工具。載入 PDF 文件，手動或使用 AI 偵測敏感資訊並套用馬賽克/模糊效果，最後儲存已淨化的檔案。",
+  "requestFramePermissions": []
+}

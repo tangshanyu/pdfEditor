@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PixelGuard PDF - 安全文件隱私保護</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Shim for process.env to prevent ReferenceError in browser environment
+      window.process = {
+        env: {
+          API_KEY: '' // The user or environment is expected to inject this if needed, or it remains empty preventing AI use but allowing UI load
+        }
+      };
+
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: '#3b82f6',
+              secondary: '#64748b',
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      /* Custom scrollbar for better aesthetics */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f1f5f9; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8; 
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "clsx": "https://esm.sh/clsx@^2.1.1",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "tailwind-merge": "https://esm.sh/tailwind-merge@^3.4.0",
+    "pdfjs-dist": "https://esm.sh/pdfjs-dist@^5.4.530",
+    "pdf-lib": "https://esm.sh/pdf-lib@^1.17.1"
+  }
+}
+</script>
+</head>
+  <body class="bg-gray-50 text-slate-900 h-screen overflow-hidden">
+    <div id="root" class="h-full"></div>
+  </body>
+</html>
