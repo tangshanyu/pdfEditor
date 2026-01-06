@@ -1,101 +1,74 @@
 import { GoogleGenAI } from "@google/genai";
 import { RedactionRect } from "../types";
 
-const initGenAI = () => {
-  // Graceful fallback if API_KEY is missing/empty, allowing app to load without crashing
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("請先設定 API Key (Please set API Key)");
-  return new GoogleGenAI({ apiKey });
-};
-
 export const detectSensitiveData = async (
   imageBase64: string,
   pageIndex: number,
   pageWidth: number,
   pageHeight: number
 ): Promise<RedactionRect[]> => {
-  try {
-    const ai = initGenAI();
-    
-    // NOTE: gemini-2.5-flash-image does not support responseSchema or responseMimeType
-    // We must ask for JSON in the prompt and parse the text manually.
-    const prompt = `
-      Analyze this image (a page from a PDF document).
-      Identify all human faces, license plates, visible email addresses, and phone numbers.
-      
-      Return ONLY a raw JSON object (no markdown, no backticks) with the following structure:
-      {
-        "boxes": [
-          {
-            "ymin": 0, "xmin": 0, "ymax": 1000, "xmax": 1000,
-            "label": "face"
-          }
-        ]
-      }
-      
-      Coordinates must be normalized to a 0-1000 scale.
-      ymin is the top edge, ymax is the bottom edge.
-      If no sensitive data is found, return { "boxes": [] }.
-    `;
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API Key 未設定");
 
+  const ai = new GoogleGenAI({ apiKey });
+
+  const prompt = `
+    Analyze this image of a document page.
+    Detect all: Human Faces, Phone Numbers, Email Addresses, ID numbers.
+    
+    Return a raw JSON object with this structure:
+    {
+      "boxes": [
+        { "ymin": 0, "xmin": 0, "ymax": 1000, "xmax": 1000, "label": "face" }
+      ]
+    }
+    
+    Rules:
+    1. Coordinates must be normalized (0-1000).
+    2. ymin is top edge, ymax is bottom edge (visual top-down).
+    3. Return only JSON, no markdown formatting.
+    4. If nothing found, return {"boxes": []}.
+  `;
+
+  try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash-image",
       contents: {
         parts: [
-            { inlineData: { mimeType: "image/jpeg", data: imageBase64 } },
-            { text: prompt }
+          { inlineData: { mimeType: "image/jpeg", data: imageBase64 } },
+          { text: prompt }
         ]
-      },
-      // Do not set responseSchema or responseMimeType for this model
+      }
     });
 
-    let jsonText = response.text || "";
+    const text = response.text || "{}";
+    const cleanText = text.replace(/```json|```/g, '').trim();
     
-    // Clean up potential markdown formatting from the response
-    jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
-
-    if (!jsonText) return [];
-
-    let result;
-    try {
-        result = JSON.parse(jsonText);
-    } catch (e) {
-        console.warn("Failed to parse JSON from AI response:", jsonText);
-        return [];
-    }
-    
-    const boxes = result.boxes || [];
+    const data = JSON.parse(cleanText);
+    const boxes = data.boxes || [];
 
     return boxes.map((box: any) => {
-        // Convert normalized 0-1000 coordinates (Top-Left origin) to PDF Points (Bottom-Left origin)
-        
-        // 1. Calculate dimensions in Points
-        const w = ((box.xmax - box.xmin) / 1000) * pageWidth;
-        const h = ((box.ymax - box.ymin) / 1000) * pageHeight;
-        
-        // 2. Calculate X (Left is same in both systems)
-        const x = (box.xmin / 1000) * pageWidth;
-        
-        // 3. Calculate Y (Convert Top-Down 'ymax' to Bottom-Up 'y')
-        // box.ymax is the visual bottom edge (larger value in Top-Down).
-        // Distance from bottom of page = pageHeight - ymax_pixels
-        const y = pageHeight - ((box.ymax / 1000) * pageHeight);
+      // Normalize 1000 -> PDF Points
+      const x = (box.xmin / 1000) * pageWidth;
+      const w = ((box.xmax - box.xmin) / 1000) * pageWidth;
+      const h = ((box.ymax - box.ymin) / 1000) * pageHeight;
+      
+      // Convert Top-Down (AI) to Bottom-Up (PDF)
+      // AI ymax is the visual bottom. 
+      // PDF y (bottom-left corner) = pageHeight - AI_ymax_pixels
+      const y = pageHeight - ((box.ymax / 1000) * pageHeight);
 
-        return {
-            id: Math.random().toString(36).substr(2, 9),
-            pageIndex,
-            x,
-            y,
-            width: w,
-            height: h
-        };
+      return {
+        id: Math.random().toString(36).slice(2),
+        pageIndex,
+        x,
+        y,
+        width: w,
+        height: h
+      };
     });
-
   } catch (error) {
-    console.error("Gemini Detection Error:", error);
-    if (error instanceof Error) {
-        throw new Error(error.message); // Propagate error message to UI
-    }
-    return [];
+    console.error("AI Detection failed:", error);
+    throw new Error("AI 分析失敗，請稍後再試");
   }
 };

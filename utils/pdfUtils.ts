@@ -2,42 +2,33 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { PDFDocument } from 'pdf-lib';
 import { RedactionRect } from '../types';
 
-// Handle potentially different import structures (ESM vs CJS default export)
-// In some environments, pdfjs-dist exports are on the default property
+// Initialize PDF.js worker securely
+// We must use the specific version matching our importmap to avoid syntax errors
 const pdfJs = (pdfjsLib as any).default || pdfjsLib;
-
-// Initialize PDF.js worker
-// Using version 3.11.174 to match the importmap version
 if (pdfJs.GlobalWorkerOptions) {
     pdfJs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
 }
 
-export const loadPdf = async (file: File): Promise<ArrayBuffer> => {
-  return await file.arrayBuffer();
+export const loadPdfDocument = async (file: File) => {
+  const buffer = await file.arrayBuffer();
+  const loadingTask = pdfJs.getDocument({ data: buffer });
+  const pdfProxy = await loadingTask.promise;
+  return { proxy: pdfProxy, buffer };
 };
 
-// Helper to load document using the configured pdfJs instance
-export const loadPdfDocument = async (data: ArrayBuffer) => {
-  const loadingTask = pdfJs.getDocument({ data });
-  return await loadingTask.promise;
-};
-
-export const getPdfPage = async (pdfData: ArrayBuffer, pageIndex: number) => {
-  // Use the local loadPdfDocument helper to ensure correct instance is used
-  const pdf = await loadPdfDocument(pdfData);
-  return await pdf.getPage(pageIndex + 1); // pdfjs uses 1-based indexing
-};
-
-export const renderPageToCanvas = async (
+export const renderPage = async (
   page: any,
   canvas: HTMLCanvasElement,
-  scale: number = 1.5
+  scale: number
 ) => {
   const viewport = page.getViewport({ scale });
   const context = canvas.getContext('2d');
   
-  if (!context) throw new Error('Canvas context not found');
+  if (!context) throw new Error('Canvas context missing');
 
+  // Reset transform to identity before resizing
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  
   canvas.height = viewport.height;
   canvas.width = viewport.width;
 
@@ -50,124 +41,139 @@ export const renderPageToCanvas = async (
   return viewport;
 };
 
-// Applies a pixelation effect to a specific region of a canvas
-export const pixelateCanvasRect = (
+// Applies pixelation to a specific rect on the canvas (UI only)
+export const applyMosaicEffect = (
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  width: number,
-  height: number,
-  pixelSize: number = 10
+  w: number,
+  h: number,
+  blockSize: number = 8
 ) => {
-  if (width <= 0 || height <= 0) return;
+  if (w <= 0 || h <= 0) return;
+  
+  // Create a tiny offscreen canvas to downscale the region
+  const offCanvas = document.createElement('canvas');
+  const offCtx = offCanvas.getContext('2d');
+  if (!offCtx) return;
 
-  // 1. Draw the image smaller (downscale)
-  // We use a temporary offscreen canvas to process the image data
-  const tempCanvas = document.createElement('canvas');
-  const tempCtx = tempCanvas.getContext('2d');
-  if (!tempCtx) return;
+  const scaledW = Math.max(1, Math.floor(w / blockSize));
+  const scaledH = Math.max(1, Math.floor(h / blockSize));
 
-  const w = Math.max(1, Math.floor(width / pixelSize));
-  const h = Math.max(1, Math.floor(height / pixelSize));
+  offCanvas.width = scaledW;
+  offCanvas.height = scaledH;
 
-  tempCanvas.width = w;
-  tempCanvas.height = h;
+  // Draw source -> tiny canvas (downsample)
+  offCtx.imageSmoothingEnabled = false;
+  offCtx.drawImage(ctx.canvas, x, y, w, h, 0, 0, scaledW, scaledH);
 
-  // Draw the source region into the tiny canvas
-  tempCtx.imageSmoothingEnabled = false;
-  tempCtx.drawImage(ctx.canvas, x, y, width, height, 0, 0, w, h);
-
-  // 2. Draw it back larger (upscale) with smoothing disabled
+  // Draw tiny canvas -> source (upsample with nearest neighbor)
   ctx.save();
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(tempCanvas, 0, 0, w, h, x, y, width, height);
+  ctx.drawImage(offCanvas, 0, 0, scaledW, scaledH, x, y, w, h);
+  
+  // Add a subtle border to make it clear where the redaction is
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, h);
+  
   ctx.restore();
 };
 
-export const savePdfWithRedactions = async (
-  originalPdfBytes: ArrayBuffer,
+export const saveRedactedPdf = async (
+  originalPdfBuffer: ArrayBuffer,
   redactions: RedactionRect[]
 ): Promise<Uint8Array> => {
-  const pdfDoc = await PDFDocument.load(originalPdfBytes);
+  const pdfDoc = await PDFDocument.load(originalPdfBuffer);
   const pages = pdfDoc.getPages();
 
-  // Group redactions by page for efficiency
-  const redactionsByPage: Record<number, RedactionRect[]> = {};
+  // Group redactions by page
+  const redMap = new Map<number, RedactionRect[]>();
   redactions.forEach(r => {
-    if (!redactionsByPage[r.pageIndex]) redactionsByPage[r.pageIndex] = [];
-    redactionsByPage[r.pageIndex].push(r);
+    const list = redMap.get(r.pageIndex) || [];
+    list.push(r);
+    redMap.set(r.pageIndex, list);
   });
 
-  for (const pageIndexStr in redactionsByPage) {
-    const pageIndex = parseInt(pageIndexStr);
-    const pageRedactions = redactionsByPage[pageIndex];
+  // Process each page that has redactions
+  for (const [pageIndex, rects] of redMap.entries()) {
     const pdfPage = pages[pageIndex];
+    if (!pdfPage) continue;
+
+    const { width, height } = pdfPage.getSize();
+
+    // To create a "burnt in" mosaic, we need to:
+    // 1. Render the page to an image to get the visual content
+    // 2. Crop the specific area
+    // 3. Pixelate it
+    // 4. Embed it as an image back over the PDF
     
-    // Render page to canvas to grab image data for the mosaic patch
-    // High scale for better quality text in the mosaic if partially readable
-    const scale = 2.0;
+    // Use pdfjs to render the page at high quality
+    const pdfJsDoc = await pdfJs.getDocument({ data: originalPdfBuffer }).promise;
+    const pageProxy = await pdfJsDoc.getPage(pageIndex + 1);
     
-    // Use getPdfPage which now uses the safe pdfJs instance
-    const pdfJsPage = await getPdfPage(originalPdfBytes, pageIndex);
+    const scale = 2.0; // Higher scale for better quality
+    const viewport = pageProxy.getViewport({ scale });
+    
     const canvas = document.createElement('canvas');
-    const viewport = await renderPageToCanvas(pdfJsPage, canvas, scale);
-    const ctx = canvas.getContext('2d');
-    
-    if (!ctx) continue;
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await pageProxy.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise;
 
-    for (const rect of pageRedactions) {
-      // Use viewport to convert PDF Point coords (Bottom-Left origin) to Canvas Pixel coords (Top-Left origin)
-      // Standard PDF Rect: (x, y) is bottom-left corner
-      // Top-Left of Rect in PDF space: (x, y + height)
-      // Bottom-Right of Rect in PDF space: (x + width, y)
+    for (const rect of rects) {
+      // PDF Coordinates (Bottom-Left origin) -> Canvas Coordinates (Top-Left origin)
+      // PDF: x, y (bottom), w, h
+      // Canvas: x, y_top = pageHeight - y_bottom - h
       
-      const [x1, y1] = viewport.convertToViewportPoint(rect.x, rect.y + rect.height);
-      const [x2, y2] = viewport.convertToViewportPoint(rect.x + rect.width, rect.y);
+      // Calculate coordinates relative to the unscaled PDF point system first
+      const pdfYTop = rect.y + rect.height; // Top edge in PDF coords
       
-      const canvasX = Math.min(x1, x2);
-      const canvasY = Math.min(y1, y2);
-      const canvasW = Math.abs(x2 - x1);
-      const canvasH = Math.abs(y2 - y1);
+      // Convert to viewport pixels
+      // Note: viewport.convertToViewportPoint handles the y-flip
+      // [x, y] = viewport.convertToViewportPoint(pdfX, pdfY_Top_Edge)
+      const [vx, vy] = viewport.convertToViewportPoint(rect.x, pdfYTop);
+      
+      const vw = rect.width * scale;
+      const vh = rect.height * scale;
 
-      // Create a temporary canvas for just this redaction area
+      // Create patch
       const patchCanvas = document.createElement('canvas');
-      patchCanvas.width = canvasW;
-      patchCanvas.height = canvasH;
+      patchCanvas.width = vw;
+      patchCanvas.height = vh;
       const patchCtx = patchCanvas.getContext('2d');
       
       if (patchCtx) {
-        // Pixelate on the patch
-        patchCtx.imageSmoothingEnabled = false;
+        // Pixelate logic
+        const blockSize = 12 * scale;
+        const sw = Math.max(1, Math.floor(vw / blockSize));
+        const sh = Math.max(1, Math.floor(vh / blockSize));
         
-        // Downscale
-        const pixelSize = 15 * scale; // Adjust pixel size by scale
-        const wSmall = Math.max(1, Math.ceil(canvasW / pixelSize));
-        const hSmall = Math.max(1, Math.ceil(canvasH / pixelSize));
+        const tempC = document.createElement('canvas');
+        tempC.width = sw;
+        tempC.height = sh;
+        const tempCtx = tempC.getContext('2d');
         
-        const tempSmall = document.createElement('canvas');
-        tempSmall.width = wSmall;
-        tempSmall.height = hSmall;
-        const tempSmallCtx = tempSmall.getContext('2d');
-        
-        if (tempSmallCtx) {
-           tempSmallCtx.drawImage(canvas, canvasX, canvasY, canvasW, canvasH, 0, 0, wSmall, hSmall);
-           // Upscale to patch
-           patchCtx.drawImage(tempSmall, 0, 0, wSmall, hSmall, 0, 0, canvasW, canvasH);
-           
-           // Get PNG data
-           const patchDataUrl = patchCanvas.toDataURL('image/png');
-           
-           // Embed in PDF
-           const pngImage = await pdfDoc.embedPng(patchDataUrl);
-           
-           // Draw on PDF Page using standard PDF coordinates (Bottom-Left origin)
-           pdfPage.drawImage(pngImage, {
-             x: rect.x,
-             y: rect.y,
-             width: rect.width,
-             height: rect.height,
-           });
+        if (tempCtx) {
+            tempCtx.imageSmoothingEnabled = false;
+            // Capture original content from the full page render
+            tempCtx.drawImage(canvas, vx, vy, vw, vh, 0, 0, sw, sh);
+            
+            // Draw back to patch
+            patchCtx.imageSmoothingEnabled = false;
+            patchCtx.drawImage(tempC, 0, 0, sw, sh, 0, 0, vw, vh);
         }
+        
+        // Convert to PNG and embed
+        const pngImage = await pdfDoc.embedPng(patchCanvas.toDataURL('image/png'));
+        
+        // Draw the image onto the PDF page
+        // PDF-lib uses (x, y) as bottom-left corner
+        pdfPage.drawImage(pngImage, {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+        });
       }
     }
   }
@@ -175,6 +181,6 @@ export const savePdfWithRedactions = async (
   return await pdfDoc.save();
 };
 
-export const getBase64FromCanvas = (canvas: HTMLCanvasElement): string => {
-    return canvas.toDataURL('image/jpeg').split(',')[1];
-};
+export const canvasToBase64 = (canvas: HTMLCanvasElement) => {
+    return canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+}

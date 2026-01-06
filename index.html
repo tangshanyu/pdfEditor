@@ -6,10 +6,10 @@
     <title>PixelGuard PDF - 安全文件隱私保護</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      // Shim for process.env to prevent ReferenceError in browser environment
+      // Process env shim
       window.process = {
         env: {
-          API_KEY: '' // The user or environment is expected to inject this if needed, or it remains empty preventing AI use but allowing UI load
+          API_KEY: '' 
         }
       };
 
@@ -17,21 +17,24 @@
         theme: {
           extend: {
             colors: {
-              primary: '#3b82f6',
-              secondary: '#64748b',
+              primary: '#2563eb', // blue-600
+              secondary: '#475569', // slate-600
+              danger: '#dc2626', // red-600
             }
           }
         }
       }
     </script>
     <style>
-      /* Custom scrollbar for better aesthetics */
+      body {
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      }
       ::-webkit-scrollbar {
         width: 8px;
         height: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: #f1f5f9; 
+        background: transparent; 
       }
       ::-webkit-scrollbar-thumb {
         background: #cbd5e1; 
@@ -40,27 +43,30 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #94a3b8; 
       }
+      .canvas-container {
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+      }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@18.3.1",
-    "react/": "https://esm.sh/react@18.3.1/",
-    "react-dom": "https://esm.sh/react-dom@18.3.1",
-    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
-    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-    "lucide-react": "https://esm.sh/lucide-react@0.400.0?deps=react@18.3.1",
-    "tailwind-merge": "https://esm.sh/tailwind-merge@^2.2.0",
-    "pdfjs-dist": "https://esm.sh/pdfjs-dist@3.11.174",
-    "pdf-lib": "https://esm.sh/pdf-lib@^1.17.1",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
-  }
-}
-</script>
-</head>
-  <body class="bg-gray-50 text-slate-900 h-screen overflow-hidden">
-    <div id="root" class="h-full"></div>
-    <!-- Explicitly load the entry point -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.3.1",
+        "react/": "https://esm.sh/react@18.3.1/",
+        "react-dom": "https://esm.sh/react-dom@18.3.1",
+        "react-dom/": "https://esm.sh/react-dom@18.3.1/",
+        "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+        "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+        "lucide-react": "https://esm.sh/lucide-react@0.400.0?deps=react@18.3.1",
+        "tailwind-merge": "https://esm.sh/tailwind-merge@^2.2.0",
+        "clsx": "https://esm.sh/clsx@^2.1.0",
+        "pdfjs-dist": "https://esm.sh/pdfjs-dist@3.11.174",
+        "pdf-lib": "https://esm.sh/pdf-lib@^1.17.1"
+      }
+    }
+    </script>
+  </head>
+  <body class="bg-slate-100 h-screen overflow-hidden text-slate-900 antialiased selection:bg-blue-100 selection:text-blue-900">
+    <div id="root" class="h-full flex flex-col"></div>
     <script type="module" src="./index.tsx"></script>
   </body>
 </html>
