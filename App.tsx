@@ -20,10 +20,14 @@ export default function App() {
 
   // --- Refs ---
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Cache the clean PDF render so we don't re-render it on every mouse interaction
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const currentViewport = useRef<any>(null);
+  const renderTaskRef = useRef<any>(null);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const startPos = useRef<{x: number, y: number} | null>(null);
-  const currentViewport = useRef<any>(null);
 
   // --- Handlers ---
 
@@ -41,6 +45,8 @@ export default function App() {
       setCurrIndex(0);
       setRedactions([]);
       setMode('mosaic');
+      // Clear cache
+      offscreenCanvasRef.current = null;
     } catch (err) {
       console.error(err);
       alert('無法載入 PDF，請確認檔案格式。');
@@ -49,27 +55,77 @@ export default function App() {
     }
   };
 
-  const draw = useCallback(async () => {
-    if (!pdfProxy || !canvasRef.current) return;
-    
-    try {
-      const page = await pdfProxy.getPage(currIndex + 1);
-      // Determine efficient scale for rendering (cap max scale for performance)
-      // Usually user scale * device pixel ratio, but 1.5-2.0 is often plenty crisp
-      const renderScale = scale * window.devicePixelRatio; 
-      
-      const viewport = await renderPage(page, canvasRef.current, scale);
-      currentViewport.current = viewport;
+  // 1. Heavy Task: Render PDF Page to Offscreen Canvas
+  // Only runs when Page, File, or Scale changes
+  useEffect(() => {
+    let mounted = true;
 
-      const ctx = canvasRef.current.getContext('2d');
-      if (!ctx) return;
-
-      // Draw redactions for this page
-      const pageRedactions = redactions.filter(r => r.pageIndex === currIndex);
+    const renderPdfBase = async () => {
+      if (!pdfProxy) return;
       
-      pageRedactions.forEach(rect => {
-        // Convert PDF Point (bottom-left origin) to Canvas Pixel (top-left origin)
-        // PDF Rect top Y = rect.y + rect.height
+      setProcessing(p => ({ ...p, isProcessing: true, message: 'Rendering...' }));
+      
+      try {
+        if (renderTaskRef.current) {
+          // Attempt to cancel previous render if possible, or just ignore result
+          // pdf.js render tasks can be cancelled
+        }
+
+        const page = await pdfProxy.getPage(currIndex + 1);
+        const renderScale = scale * window.devicePixelRatio; 
+        const viewport = page.getViewport({ scale: scale }); // Logic scale
+        
+        // We use a separate canvas for the underlying PDF
+        if (!offscreenCanvasRef.current) {
+          offscreenCanvasRef.current = document.createElement('canvas');
+        }
+        
+        const osCanvas = offscreenCanvasRef.current;
+        const task = renderPage(page, osCanvas, scale); // renderPage helper handles resizing
+        
+        // Save viewport for coordinate conversion
+        currentViewport.current = await task; 
+
+        if (mounted) {
+           // Trigger the UI draw
+           drawOverlay(); 
+        }
+      } catch (error) {
+        console.error("PDF Render error:", error);
+      } finally {
+        if (mounted) setProcessing(p => ({ ...p, isProcessing: false, message: '' }));
+      }
+    };
+
+    renderPdfBase();
+
+    return () => { mounted = false; };
+  }, [pdfProxy, currIndex, scale]); // Dependencies specifically exclude 'redactions'
+
+  // 2. Light Task: Draw Offscreen Canvas + Redactions to Visible Canvas
+  // Runs whenever Redactions change or the base render finishes
+  const drawOverlay = useCallback(() => {
+     if (!canvasRef.current || !offscreenCanvasRef.current || !currentViewport.current) return;
+     
+     const ctx = canvasRef.current.getContext('2d');
+     const osCanvas = offscreenCanvasRef.current;
+     
+     if (!ctx) return;
+
+     // 1. Clear & Resize visible canvas to match offscreen
+     if (canvasRef.current.width !== osCanvas.width || canvasRef.current.height !== osCanvas.height) {
+        canvasRef.current.width = osCanvas.width;
+        canvasRef.current.height = osCanvas.height;
+     }
+
+     // 2. Blit the cached PDF page (Instant)
+     ctx.drawImage(osCanvas, 0, 0);
+
+     // 3. Draw Redactions (Fast)
+     const viewport = currentViewport.current;
+     const pageRedactions = redactions.filter(r => r.pageIndex === currIndex);
+     
+     pageRedactions.forEach(rect => {
         const [x1, y1] = viewport.convertToViewportPoint(rect.x, rect.y + rect.height);
         const [x2, y2] = viewport.convertToViewportPoint(rect.x + rect.width, rect.y);
         
@@ -79,16 +135,14 @@ export default function App() {
         const ph = Math.abs(y2 - y1);
         
         applyMosaicEffect(ctx, px, py, pw, ph, 10);
-      });
+     });
 
-    } catch (error) {
-      console.error("Render error:", error);
-    }
-  }, [pdfProxy, currIndex, scale, redactions]);
+  }, [redactions, currIndex]); // Runs frequently
 
+  // Trigger drawOverlay when redactions change
   useEffect(() => {
-    draw();
-  }, [draw]);
+    drawOverlay();
+  }, [drawOverlay]);
 
   // --- Interaction Logic ---
 
@@ -105,8 +159,14 @@ export default function App() {
   };
 
   const onMouseMove = (e: React.MouseEvent) => {
-    // We could render a selection box here for better UX
-    // For now, relies on standard drag feeling
+    if (!isDragging.current || !startPos.current || !canvasRef.current) return;
+    
+    // Optional: Draw selection rectangle dynamically (preview)
+    // We would need to requestAnimationFrame loop or just re-draw overlay + rect here
+    const cur = getPos(e);
+    // For performance, we can implement a temporary preview here if desired, 
+    // but standard DOM overlay or just waiting for mouseUp is often fine.
+    // Let's keep it simple for now to ensure stability.
   };
 
   const onMouseUp = (e: React.MouseEvent) => {
@@ -169,9 +229,9 @@ export default function App() {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-      } catch (e) {
+      } catch (e: any) {
         console.error(e);
-        alert('儲存失敗');
+        alert(`儲存失敗: ${e.message}`);
       } finally {
         setProcessing({ isProcessing: false, message: '' });
       }
@@ -179,16 +239,27 @@ export default function App() {
   };
 
   const handleAI = async () => {
-    if (!pdfProxy || !canvasRef.current) return;
+    // Need current clean image for AI.
+    // We can use the offscreen canvas which contains the clean render!
+    if (!pdfProxy || !offscreenCanvasRef.current) return;
     setProcessing({ isProcessing: true, message: 'AI 正在分析本頁敏感資訊...' });
 
     try {
-      // Get a clean image of the page (render again without redactions)
+      const base64 = canvasToBase64(offscreenCanvasRef.current);
+      // Pass actual viewport dimensions
+      const width = offscreenCanvasRef.current.width;
+      const height = offscreenCanvasRef.current.height;
+      
+      // Note: We need PDF Point dimensions for the API to normalize correctly,
+      // but our service expects the image size to de-normalize.
+      // Actually our service logic:
+      // 1. AI returns 0-1000 coords.
+      // 2. We convert 0-1000 -> PDF Points using PDF Page Width/Height.
+      // We need the PDF Page dimensions in Points, not Pixels.
+      
       const page = await pdfProxy.getPage(currIndex + 1);
-      const tempCanvas = document.createElement('canvas');
-      const viewport = await renderPage(page, tempCanvas, 1.0); // Native scale for AI
-      const base64 = canvasToBase64(tempCanvas);
-
+      const viewport = page.getViewport({ scale: 1.0 }); // Natural PDF units
+      
       const found = await detectSensitiveData(base64, currIndex, viewport.width, viewport.height);
       
       if (found.length === 0) {

@@ -3,7 +3,6 @@ import { PDFDocument } from 'pdf-lib';
 import { RedactionRect } from '../types';
 
 // Initialize PDF.js worker securely
-// We must use the specific version matching our importmap to avoid syntax errors
 const pdfJs = (pdfjsLib as any).default || pdfjsLib;
 if (pdfJs.GlobalWorkerOptions) {
     pdfJs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
@@ -11,8 +10,13 @@ if (pdfJs.GlobalWorkerOptions) {
 
 export const loadPdfDocument = async (file: File) => {
   const buffer = await file.arrayBuffer();
-  const loadingTask = pdfJs.getDocument({ data: buffer });
+  // CRITICAL FIX: PDF.js transfers the buffer to the worker, detaching the original.
+  // We must pass a copy to PDF.js so we keep the original 'buffer' valid for saving later.
+  const bufferForWorker = buffer.slice(0);
+  
+  const loadingTask = pdfJs.getDocument({ data: bufferForWorker });
   const pdfProxy = await loadingTask.promise;
+  
   return { proxy: pdfProxy, buffer };
 };
 
@@ -22,7 +26,7 @@ export const renderPage = async (
   scale: number
 ) => {
   const viewport = page.getViewport({ scale });
-  const context = canvas.getContext('2d');
+  const context = canvas.getContext('2d', { willReadFrequently: true });
   
   if (!context) throw new Error('Canvas context missing');
 
@@ -84,6 +88,11 @@ export const saveRedactedPdf = async (
   originalPdfBuffer: ArrayBuffer,
   redactions: RedactionRect[]
 ): Promise<Uint8Array> => {
+  // Defensive check for detached buffer
+  if (originalPdfBuffer.byteLength === 0) {
+    throw new Error("PDF Buffer is empty. Please reload the file.");
+  }
+
   const pdfDoc = await PDFDocument.load(originalPdfBuffer);
   const pages = pdfDoc.getPages();
 
@@ -95,21 +104,18 @@ export const saveRedactedPdf = async (
     redMap.set(r.pageIndex, list);
   });
 
+  // Since we cannot easily reuse the PDF.js instance due to worker transfer issues in saving context,
+  // We reload the doc into PDF.js specifically for the "Burn-in" rendering process.
+  // We use a fresh copy of the buffer.
+  const bufferCopy = originalPdfBuffer.slice(0);
+  const pdfJsDoc = await pdfJs.getDocument({ data: bufferCopy }).promise;
+
   // Process each page that has redactions
   for (const [pageIndex, rects] of redMap.entries()) {
     const pdfPage = pages[pageIndex];
     if (!pdfPage) continue;
 
-    const { width, height } = pdfPage.getSize();
-
-    // To create a "burnt in" mosaic, we need to:
-    // 1. Render the page to an image to get the visual content
-    // 2. Crop the specific area
-    // 3. Pixelate it
-    // 4. Embed it as an image back over the PDF
-    
     // Use pdfjs to render the page at high quality
-    const pdfJsDoc = await pdfJs.getDocument({ data: originalPdfBuffer }).promise;
     const pageProxy = await pdfJsDoc.getPage(pageIndex + 1);
     
     const scale = 2.0; // Higher scale for better quality
@@ -118,19 +124,16 @@ export const saveRedactedPdf = async (
     const canvas = document.createElement('canvas');
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-    await pageProxy.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) continue;
+    
+    await pageProxy.render({ canvasContext: ctx, viewport }).promise;
 
     for (const rect of rects) {
       // PDF Coordinates (Bottom-Left origin) -> Canvas Coordinates (Top-Left origin)
-      // PDF: x, y (bottom), w, h
-      // Canvas: x, y_top = pageHeight - y_bottom - h
-      
-      // Calculate coordinates relative to the unscaled PDF point system first
       const pdfYTop = rect.y + rect.height; // Top edge in PDF coords
       
-      // Convert to viewport pixels
-      // Note: viewport.convertToViewportPoint handles the y-flip
-      // [x, y] = viewport.convertToViewportPoint(pdfX, pdfY_Top_Edge)
       const [vx, vy] = viewport.convertToViewportPoint(rect.x, pdfYTop);
       
       const vw = rect.width * scale;
@@ -167,7 +170,6 @@ export const saveRedactedPdf = async (
         const pngImage = await pdfDoc.embedPng(patchCanvas.toDataURL('image/png'));
         
         // Draw the image onto the PDF page
-        // PDF-lib uses (x, y) as bottom-left corner
         pdfPage.drawImage(pngImage, {
           x: rect.x,
           y: rect.y,
