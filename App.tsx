@@ -505,7 +505,7 @@ export default function App() {
     if (!activeDoc) return;
     // Suggest a filename based on the document name
     const baseName = activeDoc.name.replace(/\.pdf$/i, '');
-    setSaveFileName(`pixelguard_${baseName}`);
+    setSaveFileName(baseName);
     setShowSaveModal(true);
   };
 
