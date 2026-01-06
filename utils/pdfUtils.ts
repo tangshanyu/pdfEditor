@@ -2,18 +2,30 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { PDFDocument } from 'pdf-lib';
 import { RedactionRect } from '../types';
 
+// Handle potentially different import structures (ESM vs CJS default export)
+// In some environments, pdfjs-dist exports are on the default property
+const pdfJs = (pdfjsLib as any).default || pdfjsLib;
+
 // Initialize PDF.js worker
-// Using version 4.0.379 to match the stable version in importmap
-// Using unpkg for the worker ensures better stability and avoids some ESM shim issues in worker context
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs`;
+// Using version 3.11.174 to avoid Top-Level Await build errors in some environments
+// Using unpkg for the worker ensures better stability
+if (pdfJs.GlobalWorkerOptions) {
+    pdfJs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
+}
 
 export const loadPdf = async (file: File): Promise<ArrayBuffer> => {
   return await file.arrayBuffer();
 };
 
+// Helper to load document using the configured pdfJs instance
+export const loadPdfDocument = async (data: ArrayBuffer) => {
+  const loadingTask = pdfJs.getDocument({ data });
+  return await loadingTask.promise;
+};
+
 export const getPdfPage = async (pdfData: ArrayBuffer, pageIndex: number) => {
-  const loadingTask = pdfjsLib.getDocument({ data: pdfData });
-  const pdf = await loadingTask.promise;
+  // Use the local loadPdfDocument helper to ensure correct instance is used
+  const pdf = await loadPdfDocument(pdfData);
   return await pdf.getPage(pageIndex + 1); // pdfjs uses 1-based indexing
 };
 
@@ -95,6 +107,8 @@ export const savePdfWithRedactions = async (
     // Render page to canvas to grab image data for the mosaic patch
     // High scale for better quality text in the mosaic if partially readable
     const scale = 2.0;
+    
+    // Use getPdfPage which now uses the safe pdfJs instance
     const pdfJsPage = await getPdfPage(originalPdfBytes, pageIndex);
     const canvas = document.createElement('canvas');
     const viewport = await renderPageToCanvas(pdfJsPage, canvas, scale);

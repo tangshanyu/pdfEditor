@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Upload, Download, Undo2, Eraser, Move, LayoutGrid, FileText, Shield, Sparkles } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { RedactionRect, ToolMode, ProcessingState } from './types';
-import { loadPdf, renderPageToCanvas, savePdfWithRedactions, pixelateCanvasRect, getBase64FromCanvas } from './utils/pdfUtils';
+import { loadPdf, renderPageToCanvas, savePdfWithRedactions, pixelateCanvasRect, getBase64FromCanvas, loadPdfDocument } from './utils/pdfUtils';
 import { detectSensitiveData } from './services/geminiService';
 import { Button } from './components/Button';
 
@@ -38,8 +38,8 @@ const App: React.FC = () => {
     setProcessing({ isProcessing: true, message: '正在載入 PDF...' });
     try {
       const data = await loadPdf(file);
-      const loadingTask = pdfjsLib.getDocument({ data });
-      const pdfDocument = await loadingTask.promise;
+      // Use the helper from utils to ensure worker is configured correctly
+      const pdfDocument = await loadPdfDocument(data);
       
       setPdf({
         file,
