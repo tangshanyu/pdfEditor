@@ -73,8 +73,12 @@ export default function App() {
   
   // UI State
   const [toolType, setToolType] = useState<RedactionType>('mosaic');
-  const [mode, setMode] = useState<ToolMode>('edit');
+  const [mode, setMode] = useState<ToolMode>('view');
   const [processing, setProcessing] = useState<ProcessingState>({ isProcessing: false, message: '' });
+
+  // Save Modal State
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [saveFileName, setSaveFileName] = useState('');
 
   // Helpers
   const activeDoc = documents.find(d => d.id === activeDocId);
@@ -124,7 +128,7 @@ export default function App() {
       setDocuments(prev => [...prev, ...newDocs]);
       if (newDocs.length > 0) {
         setActiveDocId(newDocs[0].id);
-        setMode('edit');
+        // Default stays as 'view' mode as initialized in state
       }
     } catch (err) {
       console.error(err);
@@ -495,9 +499,27 @@ export default function App() {
     }
   };
 
-  const handleSave = async () => {
+  // --- Save Logic ---
+
+  const handleSaveClick = () => {
     if (!activeDoc) return;
+    // Suggest a filename based on the document name
+    const baseName = activeDoc.name.replace(/\.pdf$/i, '');
+    setSaveFileName(`pixelguard_${baseName}`);
+    setShowSaveModal(true);
+  };
+
+  const performSave = async () => {
+    if (!activeDoc) return;
+    setShowSaveModal(false);
     setProcessing({ isProcessing: true, message: '產生 PDF 中...' });
+    
+    // Ensure extension
+    let filename = saveFileName.trim();
+    if (!filename.toLowerCase().endsWith('.pdf')) {
+      filename += '.pdf';
+    }
+
     setTimeout(async () => {
       try {
         const resultBytes = await saveRedactedPdf(activeDoc.pdfBuffer, activeDoc.annotations);
@@ -505,7 +527,7 @@ export default function App() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `pixelguard_${activeDoc.name}`;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -545,7 +567,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-100">
+    <div className="flex flex-col h-full bg-slate-100 relative">
       {/* Tab Bar */}
       <div className="bg-slate-200 flex items-end px-2 pt-2 gap-1 overflow-x-auto border-b border-slate-300">
         {documents.map(doc => (
@@ -578,7 +600,7 @@ export default function App() {
       </div>
 
       {/* Toolbar */}
-      <header className="bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between shadow-sm z-20 flex-wrap gap-2">
+      <header className="bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between shadow-sm z-20 flex-wrap gap-2 relative">
         <div className="flex items-center gap-2">
            <div className="flex bg-slate-100 p-1 rounded-lg">
              <Button variant="ghost" size="sm" active={mode === 'view'} onClick={() => setMode('view')} title="瀏覽模式">
@@ -641,7 +663,7 @@ export default function App() {
            
            <div className="w-px h-5 bg-slate-300 mx-1"></div>
            
-           <Button onClick={handleSave} disabled={processing.isProcessing}>
+           <Button onClick={handleSaveClick} disabled={processing.isProcessing}>
              {processing.isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
              儲存
            </Button>
@@ -691,25 +713,27 @@ export default function App() {
              </div>
 
              <div 
-               className="flex-1 overflow-auto flex items-center justify-center p-8 relative"
+               className="flex-1 overflow-auto relative"
                ref={containerRef}
              >
-                <div className={clsx(
-                  "relative shadow-2xl transition-cursor bg-white",
-                  mode === 'edit' && toolType === 'text' ? 'cursor-text' : 
-                  mode === 'edit' && toolType === 'pen' ? 'cursor-crosshair' : 
-                  mode === 'edit' ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"
-                )}>
-                  <canvas 
-                    ref={canvasRef}
-                    onMouseDown={onMouseDown}
-                    onMouseMove={onMouseMove}
-                    onMouseUp={onMouseUp}
-                    onMouseLeave={onMouseUp}
-                    onClick={handleCanvasClick}
-                    onDoubleClick={handleDoubleClick}
-                    className="block"
-                  />
+                <div className="min-h-full min-w-full flex items-center justify-center p-8">
+                  <div className={clsx(
+                    "relative shadow-2xl transition-cursor bg-white",
+                    mode === 'edit' && toolType === 'text' ? 'cursor-text' : 
+                    mode === 'edit' && toolType === 'pen' ? 'cursor-crosshair' : 
+                    mode === 'edit' ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"
+                  )}>
+                    <canvas 
+                      ref={canvasRef}
+                      onMouseDown={onMouseDown}
+                      onMouseMove={onMouseMove}
+                      onMouseUp={onMouseUp}
+                      onMouseLeave={onMouseUp}
+                      onClick={handleCanvasClick}
+                      onDoubleClick={handleDoubleClick}
+                      className="block"
+                    />
+                  </div>
                 </div>
              </div>
           </main>
@@ -719,6 +743,53 @@ export default function App() {
           <div className="text-center">
             <Ban className="w-12 h-12 mx-auto mb-2 opacity-20" />
             <p>無開啟的文件</p>
+          </div>
+        </div>
+      )}
+
+      {/* Save Modal */}
+      {showSaveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-semibold text-lg text-slate-800">下載檔案</h3>
+              <button 
+                onClick={() => setShowSaveModal(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                檔案名稱
+              </label>
+              <div className="relative">
+                <input 
+                  type="text" 
+                  value={saveFileName}
+                  onChange={(e) => setSaveFileName(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none pr-12"
+                  autoFocus
+                  onKeyDown={(e) => e.key === 'Enter' && performSave()}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm select-none">
+                  .pdf
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                將會處理所有頁面的編輯內容並產生新的 PDF 檔案。
+              </p>
+            </div>
+            <div className="px-6 py-4 bg-slate-50 flex items-center justify-end gap-3 border-t border-slate-100">
+              <Button variant="ghost" onClick={() => setShowSaveModal(false)}>
+                取消
+              </Button>
+              <Button onClick={performSave}>
+                <Download className="w-4 h-4 mr-2" />
+                確認下載
+              </Button>
+            </div>
           </div>
         </div>
       )}
