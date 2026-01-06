@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, Download, ScanEye, Undo2, Eraser, Move, Grid3X3, FileText } from 'lucide-react';
+import { Upload, Download, Undo2, Eraser, Move, LayoutGrid, FileText, Shield, Sparkles } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { RedactionRect, ToolMode, ProcessingState } from './types';
 import { loadPdf, renderPageToCanvas, savePdfWithRedactions, pixelateCanvasRect, getBase64FromCanvas } from './utils/pdfUtils';
@@ -297,7 +297,7 @@ const App: React.FC = () => {
       <header className="flex items-center justify-between px-6 py-3 bg-white border-b border-slate-200 shadow-sm z-10">
         <div className="flex items-center gap-2">
           <div className="bg-blue-600 p-1.5 rounded-lg">
-             <ScanEye className="w-6 h-6 text-white" />
+             <Shield className="w-6 h-6 text-white" />
           </div>
           <h1 className="text-xl font-bold text-slate-800 tracking-tight">PixelGuard PDF</h1>
         </div>
@@ -318,7 +318,7 @@ const App: React.FC = () => {
                   className={`p-2 rounded-md text-sm font-medium transition-all ${toolMode === ToolMode.MOSAIC ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
                   title="馬賽克工具"
                 >
-                    <Grid3X3 className="w-4 h-4" />
+                    <LayoutGrid className="w-4 h-4" />
                 </button>
               </div>
 
@@ -426,7 +426,7 @@ const App: React.FC = () => {
                     onClick={handleMagicRedact}
                     title="自動偵測人臉與敏感資料"
                   >
-                    <ScanEye className="w-4 h-4 mr-2" />
+                    <Sparkles className="w-4 h-4 mr-2" />
                     AI 偵測
                   </Button>
                </div>

@@ -3,9 +3,9 @@ import { PDFDocument } from 'pdf-lib';
 import { RedactionRect } from '../types';
 
 // Initialize PDF.js worker
-// We hardcode the version here to match the import map in index.html (5.4.530)
-// Using esm.sh for the worker ensures better compatibility with the main library loaded from esm.sh
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@5.4.530/build/pdf.worker.min.mjs`;
+// Using version 4.0.379 to match the stable version in importmap
+// Using unpkg for the worker ensures better stability and avoids some ESM shim issues in worker context
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@4.0.379/build/pdf.worker.min.mjs`;
 
 export const loadPdf = async (file: File): Promise<ArrayBuffer> => {
   return await file.arrayBuffer();

@@ -44,20 +44,23 @@
   <script type="importmap">
 {
   "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
+    "react": "https://esm.sh/react@18.3.1",
+    "react/": "https://esm.sh/react@18.3.1/",
+    "react-dom": "https://esm.sh/react-dom@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
     "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "clsx": "https://esm.sh/clsx@^2.1.1",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "tailwind-merge": "https://esm.sh/tailwind-merge@^3.4.0",
-    "pdfjs-dist": "https://esm.sh/pdfjs-dist@^5.4.530",
-    "pdf-lib": "https://esm.sh/pdf-lib@^1.17.1"
+    "lucide-react": "https://esm.sh/lucide-react@0.400.0?deps=react@18.3.1",
+    "tailwind-merge": "https://esm.sh/tailwind-merge@^2.2.0",
+    "pdfjs-dist": "https://esm.sh/pdfjs-dist@4.0.379",
+    "pdf-lib": "https://esm.sh/pdf-lib@^1.17.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
   }
 }
 </script>
 </head>
   <body class="bg-gray-50 text-slate-900 h-screen overflow-hidden">
     <div id="root" class="h-full"></div>
+    <!-- Explicitly load the entry point -->
+    <script type="module" src="./index.tsx"></script>
   </body>
 </html>
