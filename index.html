@@ -14,6 +14,7 @@
       };
 
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             colors: {
@@ -43,6 +44,12 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #94a3b8; 
       }
+      .dark ::-webkit-scrollbar-thumb {
+        background: #475569;
+      }
+      .dark ::-webkit-scrollbar-thumb:hover {
+        background: #64748b;
+      }
       .canvas-container {
         box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
       }
@@ -65,7 +72,7 @@
     }
     </script>
   </head>
-  <body class="bg-slate-100 h-screen overflow-hidden text-slate-900 antialiased selection:bg-blue-100 selection:text-blue-900">
+  <body class="bg-slate-100 dark:bg-slate-900 h-screen overflow-hidden text-slate-900 dark:text-slate-100 antialiased selection:bg-blue-100 selection:text-blue-900">
     <div id="root" class="h-full flex flex-col"></div>
     <script type="module" src="./index.tsx"></script>
   </body>

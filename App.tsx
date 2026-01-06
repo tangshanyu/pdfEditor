@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Upload, Download, Undo2, Redo2, Eraser, MousePointer2, Grid2X2, Loader2, FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Plus, X, Pencil, Ban, Droplets, Square, Type, Highlighter } from 'lucide-react';
+import { Upload, Download, Undo2, Redo2, Eraser, MousePointer2, Grid2X2, Loader2, FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Plus, X, Pencil, Ban, Droplets, Square, Type, Highlighter, Moon, Sun } from 'lucide-react';
 import { AnnotationObject, ToolMode, ProcessingState, DocumentSession, RedactionType, Point } from './types';
 import { loadPdfDocument, renderPage, saveRedactedPdf, renderAnnotationOnCanvas } from './utils/pdfUtils';
 import { Button } from './components/Toolbar';
@@ -49,17 +49,17 @@ const PageThumbnail = ({
       onClick={onClick}
       className={clsx(
         "w-full cursor-pointer group flex flex-col items-center gap-1 p-2 rounded-lg transition-colors border-2",
-        isActive ? "bg-blue-50 border-blue-500" : "bg-transparent border-transparent hover:bg-slate-100"
+        isActive ? "bg-blue-50 dark:bg-slate-800 border-blue-500" : "bg-transparent border-transparent hover:bg-slate-100 dark:hover:bg-slate-800"
       )}
     >
-      <div className={clsx("relative shadow-sm bg-white min-h-[100px] w-full flex items-center justify-center overflow-hidden", !loaded && "animate-pulse bg-slate-200")}>
+      <div className={clsx("relative shadow-sm bg-white min-h-[100px] w-full flex items-center justify-center overflow-hidden rounded-md", !loaded && "animate-pulse bg-slate-200 dark:bg-slate-700")}>
         <canvas ref={canvasRef} className="max-w-full h-auto object-contain" />
         {/* Redaction Indicators for Thumbnail */}
         {loaded && doc.annotations.some(r => r.pageIndex === pageIndex) && (
            <div className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-red-500 border border-white shadow-sm" />
         )}
       </div>
-      <span className={clsx("text-xs font-mono", isActive ? "text-blue-700 font-bold" : "text-slate-500")}>
+      <span className={clsx("text-xs font-mono", isActive ? "text-blue-700 dark:text-blue-400 font-bold" : "text-slate-500 dark:text-slate-400")}>
         {pageIndex + 1}
       </span>
     </div>
@@ -75,6 +75,7 @@ export default function App() {
   const [toolType, setToolType] = useState<RedactionType>('mosaic');
   const [mode, setMode] = useState<ToolMode>('view');
   const [processing, setProcessing] = useState<ProcessingState>({ isProcessing: false, message: '' });
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   // Save Modal State
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -94,6 +95,27 @@ export default function App() {
   const startPos = useRef<{x: number, y: number} | null>(null);
   const currentMousePos = useRef<{x: number, y: number} | null>(null);
   const currentPath = useRef<Point[]>([]);
+
+  // --- Dark Mode Detection ---
+  useEffect(() => {
+    // Check initial system preference
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    setIsDarkMode(mediaQuery.matches);
+
+    // Listen for changes
+    const handler = (e: MediaQueryListEvent) => setIsDarkMode(e.matches);
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
+
+  // Apply dark mode class to html
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
 
   // --- Document Management ---
 
@@ -543,13 +565,13 @@ export default function App() {
 
   if (documents.length === 0) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-10 text-center border border-slate-100">
-          <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-200 rotate-3 transition-transform hover:rotate-6">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 p-4 transition-colors">
+        <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-10 text-center border border-slate-100 dark:border-slate-700">
+          <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-200 dark:shadow-blue-900/20 rotate-3 transition-transform hover:rotate-6">
             <Upload className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-slate-800 mb-3">PixelGuard PDF</h1>
-          <p className="text-slate-500 mb-8 leading-relaxed">
+          <h1 className="text-3xl font-bold text-slate-800 dark:text-white mb-3">PixelGuard PDF</h1>
+          <p className="text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">
             安全、離線的 PDF 編輯工具。<br/>
             支援馬賽克、繪圖、標註與文字編輯。
           </p>
@@ -557,7 +579,7 @@ export default function App() {
           <label className="relative inline-flex group cursor-pointer w-full">
             <div className="absolute transition-all duration-1000 opacity-70 -inset-px bg-gradient-to-r from-[#44BCFF] via-[#FF44EC] to-[#FF675E] rounded-xl blur-lg group-hover:opacity-100 group-hover:-inset-1 group-hover:duration-200 animate-tilt"></div>
             <input type="file" accept="application/pdf" multiple className="hidden" onChange={handleFileChange} />
-            <span className="relative inline-flex items-center justify-center px-8 py-4 text-lg font-bold text-white transition-all duration-200 bg-slate-900 font-pj rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 w-full">
+            <span className="relative inline-flex items-center justify-center px-8 py-4 text-lg font-bold text-white transition-all duration-200 bg-slate-900 dark:bg-slate-950 font-pj rounded-xl focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-900 w-full">
               開啟 PDF
             </span>
           </label>
@@ -567,9 +589,9 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-100 relative">
+    <div className="flex flex-col h-full bg-slate-100 dark:bg-slate-900 relative transition-colors">
       {/* Tab Bar */}
-      <div className="bg-slate-200 flex items-end px-2 pt-2 gap-1 overflow-x-auto border-b border-slate-300">
+      <div className="bg-slate-200 dark:bg-slate-900 flex items-end px-2 pt-2 gap-1 overflow-x-auto border-b border-slate-300 dark:border-slate-700">
         {documents.map(doc => (
           <div 
             key={doc.id}
@@ -578,31 +600,31 @@ export default function App() {
             className={clsx(
               "group relative flex items-center gap-2 px-4 py-2 rounded-t-lg text-sm font-medium cursor-pointer select-none min-w-[120px] max-w-[200px] transition-colors",
               activeDocId === doc.id 
-                ? "bg-white text-slate-700 shadow-[0_-1px_2px_rgba(0,0,0,0.05)]" 
-                : "bg-slate-100 text-slate-500 hover:bg-slate-50 hover:text-slate-600"
+                ? "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-[0_-1px_2px_rgba(0,0,0,0.05)]" 
+                : "bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-300"
             )}
             title={doc.name}
           >
             <span className="truncate flex-1">{doc.name}</span>
             <button 
               onClick={(e) => closeDocument(e, doc.id)}
-              className="p-0.5 rounded-full hover:bg-slate-200 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="p-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
             >
               <X className="w-3 h-3" />
             </button>
             {activeDocId === doc.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>}
           </div>
         ))}
-        <label className="flex items-center justify-center w-8 h-8 mb-1 rounded-lg hover:bg-slate-300 cursor-pointer ml-1 transition-colors">
+        <label className="flex items-center justify-center w-8 h-8 mb-1 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-800 cursor-pointer ml-1 transition-colors">
           <input type="file" accept="application/pdf" multiple className="hidden" onChange={handleFileChange} />
-          <Plus className="w-5 h-5 text-slate-600" />
+          <Plus className="w-5 h-5 text-slate-600 dark:text-slate-400" />
         </label>
       </div>
 
       {/* Toolbar */}
-      <header className="bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between shadow-sm z-20 flex-wrap gap-2 relative">
+      <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-4 py-2 flex items-center justify-between shadow-sm z-20 flex-wrap gap-2 relative">
         <div className="flex items-center gap-2">
-           <div className="flex bg-slate-100 p-1 rounded-lg">
+           <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
              <Button variant="ghost" size="sm" active={mode === 'view'} onClick={() => setMode('view')} title="瀏覽模式">
                <MousePointer2 className="w-4 h-4" />
              </Button>
@@ -611,7 +633,7 @@ export default function App() {
              </Button>
            </div>
            
-           <div className="w-px h-5 bg-slate-300 mx-1"></div>
+           <div className="w-px h-5 bg-slate-300 dark:bg-slate-600 mx-1"></div>
 
            <div className="flex items-center gap-1">
              <Button variant="ghost" size="sm" active={toolType === 'mosaic'} onClick={() => { setToolType('mosaic'); setMode('edit'); }} title="馬賽克">
@@ -621,7 +643,7 @@ export default function App() {
                <Droplets className="w-4 h-4 mr-1.5" /> 模糊
              </Button>
              
-             <div className="w-px h-4 bg-slate-200 mx-1"></div>
+             <div className="w-px h-4 bg-slate-200 dark:bg-slate-600 mx-1"></div>
              
              <Button variant="ghost" size="sm" active={toolType === 'pen'} onClick={() => { setToolType('pen'); setMode('edit'); }} title="畫筆">
                <Highlighter className="w-4 h-4 mr-1.5" /> 畫筆
@@ -633,7 +655,7 @@ export default function App() {
                <Type className="w-4 h-4 mr-1.5" /> 文字
              </Button>
 
-             <div className="w-px h-4 bg-slate-200 mx-1"></div>
+             <div className="w-px h-4 bg-slate-200 dark:bg-slate-600 mx-1"></div>
 
              <Button variant="ghost" size="sm" active={toolType === 'blackout'} onClick={() => { setToolType('blackout'); setMode('edit'); }} title="黑塗">
                <div className="w-4 h-4 bg-black border border-slate-300 rounded-sm"></div>
@@ -645,6 +667,12 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2">
+           <Button variant="ghost" size="sm" onClick={() => setIsDarkMode(!isDarkMode)} title="切換深色模式">
+             {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+           </Button>
+
+           <div className="w-px h-5 bg-slate-300 dark:bg-slate-600 mx-1"></div>
+
            <Button variant="ghost" size="sm" onClick={handleUndo} title="復原 (Ctrl+Z)" disabled={!activeDoc || activeDoc.annotations.length === 0}>
              <Undo2 className="w-4 h-4" />
            </Button>
@@ -652,7 +680,7 @@ export default function App() {
              <Redo2 className="w-4 h-4" />
            </Button>
 
-           <div className="w-px h-5 bg-slate-300 mx-1"></div>
+           <div className="w-px h-5 bg-slate-300 dark:bg-slate-600 mx-1"></div>
 
            <Button variant="ghost" size="sm" onClick={() => updateActiveDoc(d => ({ 
              annotations: d.annotations.filter(r => r.pageIndex !== d.currIndex),
@@ -661,7 +689,7 @@ export default function App() {
              <Eraser className="w-4 h-4" />
            </Button>
            
-           <div className="w-px h-5 bg-slate-300 mx-1"></div>
+           <div className="w-px h-5 bg-slate-300 dark:bg-slate-600 mx-1"></div>
            
            <Button onClick={handleSaveClick} disabled={processing.isProcessing}>
              {processing.isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
@@ -674,8 +702,8 @@ export default function App() {
       {activeDoc ? (
         <div className="flex flex-1 overflow-hidden relative">
           {/* Sidebar */}
-          <aside className="w-56 bg-white border-r border-slate-200 flex flex-col hidden md:flex overflow-hidden">
-             <div className="p-3 border-b border-slate-100 font-medium text-slate-500 text-xs uppercase tracking-wider">
+          <aside className="w-56 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col hidden md:flex overflow-hidden">
+             <div className="p-3 border-b border-slate-100 dark:border-slate-700 font-medium text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider">
                {activeDoc.numPages} 頁面
              </div>
              <div className="flex-1 overflow-y-auto p-3 space-y-3">
@@ -692,22 +720,22 @@ export default function App() {
           </aside>
 
           {/* Canvas */}
-          <main className="flex-1 bg-slate-100 relative overflow-hidden flex flex-col">
+          <main className="flex-1 bg-slate-100 dark:bg-slate-900 relative overflow-hidden flex flex-col">
              {/* Float Controls */}
-             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur rounded-full shadow-lg border border-slate-200 p-1.5 flex items-center gap-3 z-10 px-4 transition-opacity hover:opacity-100 opacity-80">
-                <button onClick={() => updateActiveDoc(d => ({ currIndex: Math.max(0, d.currIndex - 1) }))} disabled={activeDoc.currIndex === 0} className="p-1 hover:text-blue-600 disabled:opacity-30">
+             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/90 dark:bg-slate-800/90 dark:text-slate-200 backdrop-blur rounded-full shadow-lg border border-slate-200 dark:border-slate-600 p-1.5 flex items-center gap-3 z-10 px-4 transition-opacity hover:opacity-100 opacity-80">
+                <button onClick={() => updateActiveDoc(d => ({ currIndex: Math.max(0, d.currIndex - 1) }))} disabled={activeDoc.currIndex === 0} className="p-1 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-30">
                   <ChevronLeft className="w-5 h-5" />
                 </button>
                 <span className="text-sm font-mono min-w-[3ch] text-center">{activeDoc.currIndex + 1} / {activeDoc.numPages}</span>
-                <button onClick={() => updateActiveDoc(d => ({ currIndex: Math.min(d.numPages - 1, d.currIndex + 1) }))} disabled={activeDoc.currIndex === activeDoc.numPages - 1} className="p-1 hover:text-blue-600 disabled:opacity-30">
+                <button onClick={() => updateActiveDoc(d => ({ currIndex: Math.min(d.numPages - 1, d.currIndex + 1) }))} disabled={activeDoc.currIndex === activeDoc.numPages - 1} className="p-1 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-30">
                   <ChevronRight className="w-5 h-5" />
                 </button>
-                <div className="w-px h-4 bg-slate-300"></div>
-                <button onClick={() => updateActiveDoc(d => ({ scale: Math.max(0.5, d.scale - 0.25) }))} className="p-1 hover:text-blue-600">
+                <div className="w-px h-4 bg-slate-300 dark:bg-slate-600"></div>
+                <button onClick={() => updateActiveDoc(d => ({ scale: Math.max(0.5, d.scale - 0.25) }))} className="p-1 hover:text-blue-600 dark:hover:text-blue-400">
                   <ZoomOut className="w-4 h-4" />
                 </button>
                 <span className="text-xs font-mono w-10 text-center">{Math.round(activeDoc.scale * 100)}%</span>
-                <button onClick={() => updateActiveDoc(d => ({ scale: Math.min(3.0, d.scale + 0.25) }))} className="p-1 hover:text-blue-600">
+                <button onClick={() => updateActiveDoc(d => ({ scale: Math.min(3.0, d.scale + 0.25) }))} className="p-1 hover:text-blue-600 dark:hover:text-blue-400">
                   <ZoomIn className="w-4 h-4" />
                 </button>
              </div>
@@ -739,7 +767,7 @@ export default function App() {
           </main>
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center text-slate-400">
+        <div className="flex-1 flex items-center justify-center text-slate-400 dark:text-slate-600">
           <div className="text-center">
             <Ban className="w-12 h-12 mx-auto mb-2 opacity-20" />
             <p>無開啟的文件</p>
@@ -750,18 +778,18 @@ export default function App() {
       {/* Save Modal */}
       {showSaveModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-semibold text-lg text-slate-800">下載檔案</h3>
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+              <h3 className="font-semibold text-lg text-slate-800 dark:text-white">下載檔案</h3>
               <button 
                 onClick={() => setShowSaveModal(false)}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6">
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 檔案名稱
               </label>
               <div className="relative">
@@ -769,7 +797,7 @@ export default function App() {
                   type="text" 
                   value={saveFileName}
                   onChange={(e) => setSaveFileName(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none pr-12"
+                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none pr-12 bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
                   autoFocus
                   onKeyDown={(e) => e.key === 'Enter' && performSave()}
                 />
@@ -777,11 +805,11 @@ export default function App() {
                   .pdf
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-2">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
                 將會處理所有頁面的編輯內容並產生新的 PDF 檔案。
               </p>
             </div>
-            <div className="px-6 py-4 bg-slate-50 flex items-center justify-end gap-3 border-t border-slate-100">
+            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-end gap-3 border-t border-slate-100 dark:border-slate-700">
               <Button variant="ghost" onClick={() => setShowSaveModal(false)}>
                 取消
               </Button>
