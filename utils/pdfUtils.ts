@@ -7,8 +7,7 @@ import { RedactionRect } from '../types';
 const pdfJs = (pdfjsLib as any).default || pdfjsLib;
 
 // Initialize PDF.js worker
-// Using version 3.11.174 to avoid Top-Level Await build errors in some environments
-// Using unpkg for the worker ensures better stability and avoids importmap complexities for the worker file specifically
+// Using version 3.11.174 to match the importmap version
 if (pdfJs.GlobalWorkerOptions) {
     pdfJs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
 }

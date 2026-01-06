@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { RedactionRect } from "../types";
 
 const initGenAI = () => {
@@ -17,32 +17,25 @@ export const detectSensitiveData = async (
   try {
     const ai = initGenAI();
     
-    // Schema definition for bounding boxes
-    const responseSchema = {
-      type: Type.OBJECT,
-      properties: {
-        boxes: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              ymin: { type: Type.INTEGER, description: "Top coordinate (0-1000)" },
-              xmin: { type: Type.INTEGER, description: "Left coordinate (0-1000)" },
-              ymax: { type: Type.INTEGER, description: "Bottom coordinate (0-1000)" },
-              xmax: { type: Type.INTEGER, description: "Right coordinate (0-1000)" },
-              label: { type: Type.STRING, description: "Type of sensitive data (face, email, name)" }
-            },
-            required: ["ymin", "xmin", "ymax", "xmax"]
-          }
-        }
-      }
-    };
-
+    // NOTE: gemini-2.5-flash-image does not support responseSchema or responseMimeType
+    // We must ask for JSON in the prompt and parse the text manually.
     const prompt = `
       Analyze this image (a page from a PDF document).
       Identify all human faces, license plates, visible email addresses, and phone numbers.
-      Return a list of bounding boxes for these sensitive areas.
-      Coordinates should be normalized to a 0-1000 scale.
+      
+      Return ONLY a raw JSON object (no markdown, no backticks) with the following structure:
+      {
+        "boxes": [
+          {
+            "ymin": 0, "xmin": 0, "ymax": 1000, "xmax": 1000,
+            "label": "face"
+          }
+        ]
+      }
+      
+      Coordinates must be normalized to a 0-1000 scale.
+      ymin is the top edge, ymax is the bottom edge.
+      If no sensitive data is found, return { "boxes": [] }.
     `;
 
     const response = await ai.models.generateContent({
@@ -53,17 +46,24 @@ export const detectSensitiveData = async (
             { text: prompt }
         ]
       },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: responseSchema,
-        thinkingConfig: { thinkingBudget: 0 }
-      }
+      // Do not set responseSchema or responseMimeType for this model
     });
 
-    const jsonText = response.text;
+    let jsonText = response.text || "";
+    
+    // Clean up potential markdown formatting from the response
+    jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+
     if (!jsonText) return [];
 
-    const result = JSON.parse(jsonText);
+    let result;
+    try {
+        result = JSON.parse(jsonText);
+    } catch (e) {
+        console.warn("Failed to parse JSON from AI response:", jsonText);
+        return [];
+    }
+    
     const boxes = result.boxes || [];
 
     return boxes.map((box: any) => {
